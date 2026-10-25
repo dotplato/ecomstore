@@ -43,6 +43,7 @@ export async function getCartWithItems(userId: string) {
       slug: item.product.slug,
       imageUrl: item.product.images[0]?.url ?? null,
       stock: item.product.stock,
+      status: item.product.status,
       unitPrice: unit,
       lineTotal: unit * item.quantity,
       originalPrice: toNumber(item.product.originalPrice),

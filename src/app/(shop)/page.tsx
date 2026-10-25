@@ -6,16 +6,21 @@ import { ProductCard } from "@/components/product/product-card";
 import { prisma } from "@/lib/prisma";
 
 export default async function HomePage() {
-  const [categories, featured] = await Promise.all([
+  const [categories, sections] = await Promise.all([
     prisma.category.findMany({
       orderBy: { name: "asc" },
       take: 8,
     }),
-    prisma.product.findMany({
-      take: 8,
-      orderBy: { createdAt: "desc" },
+    prisma.storefrontSection.findMany({
+      orderBy: [{ sortOrder: "asc" }, { id: "asc" }],
       include: {
-        images: { orderBy: { sortOrder: "asc" }, take: 1 },
+        products: {
+          where: { product: { status: "LIVE" } },
+          orderBy: { sortOrder: "asc" },
+          include: {
+            product: { include: { images: { orderBy: { sortOrder: "asc" }, take: 1 } } },
+          },
+        },
       },
     }),
   ]);
@@ -61,35 +66,21 @@ export default async function HomePage() {
         </div>
       </section>
 
-      <section>
-        <div className="mb-4 flex items-end justify-between gap-4">
-          <h2 className="text-2xl font-bold tracking-tight">Featured products</h2>
-          <Link
-            href="/shop"
-            className="inline-flex items-center gap-1 text-sm font-medium text-foreground/70 hover:text-foreground"
-          >
-            Shop all
-            <ArrowRight className="h-4 w-4" />
-          </Link>
-        </div>
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-          {featured.map((p) => (
-            <ProductCard
-              key={p.id}
-              product={{
-                id: p.id,
-                title: p.title,
-                slug: p.slug,
-                originalPrice: p.originalPrice,
-                discountedPrice: p.discountedPrice,
-                ratingAvg: p.ratingAvg,
-                reviewCount: p.reviewCount,
-                imageUrl: p.images[0]?.url ?? null,
-              }}
-            />
-          ))}
-        </div>
-      </section>
+      {sections.filter(section => section.products.length > 0).map(section => (
+        <section key={section.id} aria-labelledby={`section-${section.id}`}>
+          <h2 id={`section-${section.id}`} className="mb-4 text-2xl font-bold tracking-tight">{section.name}</h2>
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+            {section.products.map(({ product }) => (
+              <ProductCard key={product.id} product={{
+                id: product.id, title: product.title, slug: product.slug,
+                originalPrice: product.originalPrice, discountedPrice: product.discountedPrice,
+                ratingAvg: product.ratingAvg, reviewCount: product.reviewCount,
+                imageUrl: product.images[0]?.url ?? null,
+              }} />
+            ))}
+          </div>
+        </section>
+      ))}
     </div>
   );
 }

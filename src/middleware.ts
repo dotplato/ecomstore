@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { getToken } from "next-auth/jwt";
 
-const protectedPaths = ["/cart", "/checkout", "/wishlist"];
+const protectedPaths = ["/cart", "/checkout", "/wishlist", "/profile"];
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -27,5 +27,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/cart/:path*", "/checkout/:path*", "/wishlist/:path*"],
+  matcher: ["/cart/:path*", "/checkout/:path*", "/wishlist/:path*", "/profile/:path*"],
 };

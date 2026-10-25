@@ -2,7 +2,7 @@
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { requireUser } from "@/lib/access";
+import { requireStaff, requireUser } from "@/lib/access";
 import { prisma } from "@/lib/prisma";
 import type { FormResult } from "@/components/management/action-form";
 
@@ -12,9 +12,10 @@ export async function createThread(_: FormResult | null, data: FormData): Promis
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0].message };
   const recipientId = user.role !== "CUSTOMER" && data.get("userId") ? String(data.get("userId")) : user.id;
   if (recipientId !== user.id && !await prisma.user.findFirst({ where: { id: recipientId, role: "CUSTOMER" } })) return { ok: false, error: "Customer not found." };
-  const thread = await prisma.supportThread.create({ data: { userId: recipientId, subject: parsed.data.subject, messages: { create: { senderId: user.id, body: parsed.data.body } } } });
+  const thread = await prisma.supportThread.create({ data: { userId: recipientId, staffUnread: user.role === "CUSTOMER", subject: parsed.data.subject, messages: { create: { senderId: user.id, body: parsed.data.body } } } });
   revalidatePath("/support");
   revalidatePath("/admin/support");
+  revalidatePath("/admin");
   redirect(`/support/${thread.id}`);
 }
 export async function supportAction(_: FormResult | null, data: FormData): Promise<FormResult> {
@@ -29,7 +30,9 @@ export async function supportAction(_: FormResult | null, data: FormData): Promi
     const body = z.string().trim().min(1).max(5000).safeParse(data.get("body"));
     if (!body.success) return { ok: false, error: "Enter a message between 1 and 5000 characters." };
     if (thread.status === "CLOSED") return { ok: false, error: "This conversation is closed." };
-    await prisma.supportThread.update({ where: { id }, data: { updatedAt: new Date(), messages: { create: { senderId: user.id, body: body.data } } } });
+    await prisma.supportThread.update({ where: { id }, data: { updatedAt: new Date(), staffUnread: !staff, messages: { create: { senderId: user.id, body: body.data } } } });
+  } else if (operation === "mark-read" || operation === "mark-unread") {
+    await prisma.supportThread.update({ where: { id }, data: { staffUnread: operation === "mark-unread", updatedAt: thread.updatedAt } });
   } else if (operation === "status") {
     await prisma.supportThread.update({ where: { id }, data: { status: thread.status === "OPEN" ? "CLOSED" : "OPEN" } });
   } else if (operation === "delete") {
@@ -43,7 +46,20 @@ export async function supportAction(_: FormResult | null, data: FormData): Promi
       await prisma.supportMessage.updateMany({ where: { id: messageId, threadId: id }, data: { body: body.data } });
     }
   } else return { ok: false, error: "Invalid operation." };
-  revalidatePath("/support"); revalidatePath("/admin/support"); revalidatePath(`/support/${id}`);
+  revalidatePath("/support"); revalidatePath("/admin/support");
+  revalidatePath("/admin"); revalidatePath(`/support/${id}`);
   if (operation === "delete") redirect("/admin/support");
   return { ok: true };
+}
+
+export async function markThreadRead(id: string, seenAt: string) {
+  await requireStaff();
+  const date = z.coerce.date().safeParse(seenAt);
+  if (!date.success) return;
+  await prisma.supportThread.updateMany({
+    where: { id, staffUnread: true, updatedAt: { lte: date.data } },
+    data: { staffUnread: false, updatedAt: date.data },
+  });
+  revalidatePath("/admin/support");
+  revalidatePath("/admin");
 }

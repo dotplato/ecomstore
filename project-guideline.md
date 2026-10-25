@@ -309,3 +309,37 @@ Customer support uses private threads with messages and OPEN/CLOSED state. Custo
 ### CSS compilation and local port
 
 Tailwind v4 runs through `@tailwindcss/postcss` in `postcss.config.mjs`, shared by Turbopack and webpack. Do not use a bundler-specific CSS loader. The development script explicitly uses port 3000; stop an existing instance before starting another.
+
+## 16. Catalog management, pricing and inbox updates (2026-10-26)
+
+- Admin Products, Orders and Customers use semantic tables, URL-based filters, and accessible dialogs for create/edit/delete actions. Existing role restrictions remain: only super admins create users/products/orders; both staff roles edit inventory and apply pricing.
+- Products add optional unique SKU, featured flag and LIVE/DRAFT/HIDDEN status. Existing catalog products migrate to LIVE; new products default to DRAFT. Only LIVE products are public or purchasable, including previously saved carts and wishlists.
+- Optional sale price is stored as original price when blank. Zero is a valid sale price for a 100% discount. Bulk pricing accepts explicit product IDs across categories or an entire category, always computes against original price, rounds to cents, and updates atomically. 0% clears a discount; no compounding.
+- Product media accepts HTTPS URLs and uploaded JPEG/PNG/WebP/GIF files. Validate actual file signatures, at most 5 MB per file and 20 MB per submission. Store uploads outside public/ under UPLOAD_DIR (default ./uploads), with generated filenames; serve via /api/uploads/[filename] with fixed content types and nosniff. Docker uses a persistent volume. Remote images load directly in the browser (Next Image unoptimized) so arbitrary hosts do not trigger server-side URL fetching.
+- Support inbox is shared by staff. Customer messages mark a thread Unread/New; opening a conversation or explicitly marking it read clears that state. Staff replies count as read. A read marker includes the viewed thread timestamp to avoid clearing a newer incoming reply. Read/unread is separate from OPEN/CLOSED.
+
+## 17. Order details and customer tracking (2026-10-26)
+
+- Order statuses are PLACED, PROCESSING, IN_TRANSIT, COMPLETED and CANCELLED; labels and normal delivery steps live in src/lib/order-status.ts.
+- Admin order rows open a read-only full-details dialog on click; a keyboard-accessible View button opens the same dialog. Edit/Delete controls remain separate. Staff can change all five statuses.
+- OrderStatusEvent records each actual status change transactionally and initial placement on creation. Existing orders receive their known placement timestamp; no historical transition timestamps are invented. Skipped steps show progress without fabricated dates.
+- Customers use /profile for order history and /profile/orders/[id] for full tracking/details. Every customer detail query includes the authenticated userId, even for staff using the customer profile. Status refresh is read-only.
+- Cancellation is a separate terminal state, not a completed delivery. Existing status-edit inventory behavior is preserved (no automatic restock).
+
+## 18. Storefront sections and category management (2026-10-26)
+
+- /admin/sections is restricted to SUPER_ADMIN on both reads and mutations. StorefrontSection owns a name and sortOrder; StorefrontSectionProduct stores explicit product selections and their selection order. Defaults are Editor's Picks, New Arrival and Onsale. Defaults are created by migration/initial seed only; deleted sections never reappear on restart.
+- Homepage renders these curated sections immediately after Categories in saved sortOrder, replacing the old Featured products block. Only selected LIVE products are shown; sections without visible products are omitted. Defaults initially select featured/recent/sale products; subsequent membership is manual, not an automatic rule.
+- Creating, renaming, selecting products, moving and deleting sections are transactional. Moving renumbers the list; the UI uses accessible up/down controls. Selections persist across category/search/status filters in the editor.
+- /admin/categories is a searchable table available to ADMIN and SUPER_ADMIN, with add/edit/delete dialogs. Name, slug and optional HTTPS image URL follow existing category fields. Deleting a populated category requires a different replacement category; products are reassigned atomically, never deleted. Empty categories can be deleted directly. All storefront/admin reads are invalidated after a mutation.
+
+### Admin navigation and revenue
+Every admin tab has a labelled Lucide icon and active-page styling; role-based navigation is backed by server authorization. Overview Revenue is the all-time sum of Order.total for COMPLETED orders only (including stored shipping/tax), formatted through lib/money.ts. No date window applies. The card links to completed orders and replaces Open conversations.
+
+### Overview quick actions and new messages
+Below the four metric cards, the overview uses an aligned responsive two-panel grid.
+Quick actions open the existing product/order/category dialogs for super admins;
+admins receive inventory/order links plus category creation and pricing. The support
+panel shows up to four most recently updated unread threads and a total unread
+conversation count, linking to private thread pages and the unread inbox. Opening
+the overview never marks threads read. Support mutations invalidate /admin as well.

@@ -30,7 +30,7 @@ export async function createReviewAction(
   const product = await prisma.product.findUnique({
     where: { id: parsed.data.productId },
   });
-  if (!product) return { ok: false, error: "Product not found" };
+  if (!product || product.status !== "LIVE") return { ok: false, error: "Product not found" };
 
   const existing = await prisma.review.findUnique({
     where: {

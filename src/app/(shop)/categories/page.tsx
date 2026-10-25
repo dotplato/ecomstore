@@ -7,7 +7,7 @@ export const metadata = { title: "Categories" };
 export default async function CategoriesPage() {
   const categories = await prisma.category.findMany({
     orderBy: { name: "asc" },
-    include: { _count: { select: { products: true } } },
+    include: { _count: { select: { products: { where: { status: "LIVE" } } } } },
   });
 
   return (

@@ -34,7 +34,7 @@ export function sellingPrice(
 ): number {
   const o = toNumber(original);
   const d = toNumber(discounted);
-  return d > 0 && d < o ? d : o;
+  return d >= 0 && d < o ? d : o;
 }
 
 export function computeCheckoutTotals(subtotal: number) {

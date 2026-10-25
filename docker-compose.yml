@@ -29,9 +29,12 @@ services:
       AUTH_URL: http://localhost:3000
       SHIPPING_FEE: "5.00"
       TAX_RATE: "0.08"
+    volumes:
+      - eseller_uploads:/app/uploads
     depends_on:
       db:
         condition: service_healthy
 
 volumes:
   eseller_pgdata:
+  eseller_uploads:

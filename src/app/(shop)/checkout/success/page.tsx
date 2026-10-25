@@ -64,6 +64,8 @@ export default async function CheckoutSuccessPage({
           ))}
         </ul>
       </div>
+      <Link href={`/profile/orders/${order.id}`} className="mb-4 inline-flex h-11 items-center justify-center rounded-full border border-primary px-6 text-sm font-medium text-primary">Track your order</Link>
+      <br />
       <Link
         href="/shop"
         className="inline-flex h-11 items-center justify-center rounded-full bg-primary px-6 text-sm font-medium text-primary-foreground hover:bg-primary/90"

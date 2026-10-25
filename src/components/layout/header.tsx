@@ -82,9 +82,9 @@ export async function Header() {
             )}
           </Link>
           <Link
-            href={session ? "/wishlist" : "/login"}
+            href={session ? "/profile" : "/login"}
             className="rounded-full p-2 text-foreground/80 transition hover:bg-muted hover:text-foreground"
-            aria-label="Account"
+            aria-label="Your profile and orders"
           >
             <User className="h-5 w-5" />
           </Link>

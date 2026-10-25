@@ -35,6 +35,7 @@ export async function placeOrderAction(
   }
 
   for (const line of lines) {
+    if (line.status !== "LIVE") return { ok: false, error: `"${line.title}" is no longer available. Remove it from your cart.` };
     if (line.quantity > line.stock) {
       return {
         ok: false,
@@ -45,7 +46,9 @@ export async function placeOrderAction(
 
   const totals = computeCheckoutTotals(subtotal);
 
-  const order = await prisma.$transaction(async (tx) => {
+  let order;
+  try {
+    order = await prisma.$transaction(async (tx) => {
     const created = await tx.order.create({
       data: {
         userId: session.user.id,
@@ -56,6 +59,7 @@ export async function placeOrderAction(
         shipping: totals.shipping,
         tax: totals.tax,
         total: totals.total,
+        statusEvents: { create: { status: "PLACED" } },
         items: {
           create: lines.map((line) => ({
             productId: line.productId,
@@ -68,15 +72,19 @@ export async function placeOrderAction(
     });
 
     for (const line of lines) {
-      await tx.product.update({
-        where: { id: line.productId },
+      const changed = await tx.product.updateMany({
+        where: { id: line.productId, status: "LIVE", stock: { gte: line.quantity } },
         data: { stock: { decrement: line.quantity } },
       });
+      if (!changed.count) throw new Error("A product is no longer available. Refresh your cart.");
     }
 
     await tx.cartItem.deleteMany({ where: { cartId: cart.id } });
     return created;
-  });
+    });
+  } catch {
+    return { ok: false, error: "Your cart changed or an item is unavailable. Refresh your cart and try again." };
+  }
 
   revalidatePath("/cart");
   revalidatePath("/checkout");

@@ -21,6 +21,8 @@ export async function toggleWishlistAction(productId: string, returnPath?: strin
   if (existing) {
     await prisma.wishlistItem.delete({ where: { id: existing.id } });
   } else {
+    const product = await prisma.product.findFirst({ where: { id: productId, status: "LIVE" } });
+    if (!product) return { ok: false as const, error: "Product unavailable" };
     await prisma.wishlistItem.create({
       data: { userId: session.user.id, productId },
     });

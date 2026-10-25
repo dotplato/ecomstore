@@ -77,8 +77,54 @@ Apply database changes with `npx prisma migrate deploy` before starting an updat
 Integration checks (with the app and database running):
 
 ```bash
-TEST_URL=http://localhost:3001 node tests/portal-smoke.mjs
+TEST_URL=http://localhost:3000 node tests/portal-smoke.mjs
 ```
 
 The suite creates temporary accounts and inventory, exercises permission boundaries
 and management workflows, and removes its records afterward.
+
+## Catalog and pricing
+
+- Inventory, Orders, and Users have searchable tables and create/edit dialogs.
+  Inventory and Orders also filter by category and status.
+- Products support SKU, featured placement, multiple HTTPS image URLs or uploads,
+  optional sale prices, and Live / Draft / Hidden visibility. Existing products
+  remain Live after migration; newly created products default to Draft.
+- Only Live products appear in the storefront or can be purchased.
+- **Admin → Pricing** applies a percentage discount to selected products across
+  categories or all products in one category. Discounts replace the current sale
+  price and use the original price; 0% clears a discount.
+- **Admin → Support** provides All / Unread-New / Read tabs and message previews.
+  Read states are shared by staff and reset when a customer replies.
+- Uploaded JPEG/PNG/WebP/GIF images are stored in `./uploads` (override with
+  `UPLOAD_DIR`). Docker persists them in the `eseller_uploads` volume.
+  Limits: 5 MB per image, 20 MB total and 20 images per product.
+
+## Order tracking
+
+Click an admin order row (or its View button) to see the full order, recipient,
+address, message, line items, totals and tracking history. Edit offers five statuses:
+Placed, Processing, In transit, Completed and Cancelled.
+
+Customers open their profile via the account icon or `/profile`, and track an
+individual order at `/profile/orders/[id]`. These pages only show the signed-in
+customer's orders. Updates refresh every 30 seconds while visible, or on demand.
+
+Actual status changes are recorded transactionally. Existing placement dates are
+preserved; older transition dates are not fabricated. Cancellation is displayed
+separately from delivery completion. Status edits do not adjust inventory.
+
+## Storefront sections, categories and revenue
+
+Super admins manage **Storefront Sections** at `/admin/sections`: create/delete
+sections, edit their names and product selections, and move them up/down.
+Editor's Picks, New Arrival and Onsale start with curated defaults. Only selected
+Live products appear, in saved section order, immediately after homepage Categories.
+Empty sections are not displayed. Deleting sections never deletes their products.
+
+Both staff roles manage **Categories** at `/admin/categories` using searchable
+tables and add/edit/delete dialogs. Deleting a category that contains products
+requires choosing a replacement; its inventory is moved atomically.
+
+Overview **Revenue** is the all-time sum of totals for Completed orders. Its card
+links to the completed-order list. Every admin navigation tab has an icon.

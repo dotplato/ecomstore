@@ -21,7 +21,7 @@ export default async function ShopPage({
     select: { name: true, slug: true },
   });
 
-  const where: Prisma.ProductWhereInput = {};
+  const where: Prisma.ProductWhereInput = { status: "LIVE" };
   if (categorySlug) {
     where.category = { slug: categorySlug };
   }

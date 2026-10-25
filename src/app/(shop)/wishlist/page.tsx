@@ -14,7 +14,7 @@ export default async function WishlistPage() {
   if (!session?.user?.id) redirect("/login?callbackUrl=/wishlist");
 
   const items = await prisma.wishlistItem.findMany({
-    where: { userId: session.user.id },
+    where: { userId: session.user.id, product: { status: "LIVE" } },
     include: {
       product: {
         include: {

@@ -22,7 +22,7 @@ export async function addToCartAction(
   quantity = 1,
 ): Promise<CartActionResult> {
   const product = await prisma.product.findUnique({ where: { id: productId } });
-  if (!product) return { ok: false, error: "Product not found" };
+  if (!product || product.status !== "LIVE") return { ok: false, error: "Product not found" };
   const userId = await requireUserId(`/product/${product.slug}`);
   if (product.stock < 1) return { ok: false, error: "Out of stock" };
 
@@ -56,7 +56,7 @@ export async function updateCartItemAction(
 
   const cart = await getOrCreateCart(userId);
   const product = await prisma.product.findUnique({ where: { id: productId } });
-  if (!product) return { ok: false, error: "Product not found" };
+  if (!product || product.status !== "LIVE") return { ok: false, error: "Product not found" };
   if (quantity > product.stock) {
     return { ok: false, error: `Only ${product.stock} in stock` };
   }

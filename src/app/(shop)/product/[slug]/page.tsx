@@ -13,7 +13,7 @@ type Params = Promise<{ slug: string }>;
 
 export async function generateMetadata({ params }: { params: Params }) {
   const { slug } = await params;
-  const product = await prisma.product.findUnique({ where: { slug } });
+  const product = await prisma.product.findUnique({ where: { slug, status: "LIVE" } });
   return { title: product?.title ?? "Product" };
 }
 
@@ -22,7 +22,7 @@ export default async function ProductPage({ params }: { params: Params }) {
   const session = await auth();
 
   const product = await prisma.product.findUnique({
-    where: { slug },
+    where: { slug, status: "LIVE" },
     include: {
       category: true,
       images: { orderBy: { sortOrder: "asc" } },

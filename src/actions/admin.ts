@@ -5,6 +5,8 @@ import { Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { requireStaff } from "@/lib/access";
 import { prisma } from "@/lib/prisma";
+import { saveProductUploads, validateImageUrls, removeProductUploads } from "@/lib/product-media";
+import { ORDER_STATUS_VALUES } from "@/lib/order-status";
 import { computeCheckoutTotals, sellingPrice } from "@/lib/money";
 import type { FormResult } from "@/components/management/action-form";
 
@@ -16,6 +18,8 @@ export async function adminAction(_: FormResult | null, form: FormData): Promise
   const id = String(form.get("id") ?? "");
   const superOnly = ["create-user", "create-product", "create-order", "promote", "demote", "update-admin", "delete-admin"];
   if (superOnly.includes(operation) && actor.role !== "SUPER_ADMIN") return { ok: false, error: "Super admin access required." };
+  let uploadedUrls: string[] = [];
+  let uploadsCommitted = false;
   try {
     if (operation === "promote") {
       const email = z.string().trim().email().parse(form.get("email")).toLowerCase();
@@ -63,20 +67,36 @@ export async function adminAction(_: FormResult | null, form: FormData): Promise
           title: text, slug: z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/),
           about: z.string().trim().min(1).max(10000), categoryId: text,
           stock: z.coerce.number().int().min(0).max(1000000),
-          originalPrice: amount, discountedPrice: amount,
-        }).parse(Object.fromEntries(form));
-        if (parsed.discountedPrice > parsed.originalPrice) return { ok: false, error: "Discounted price cannot exceed original price." };
-        const urls = z.array(z.string().url().refine(url => url.startsWith("https://images.unsplash.com/"), "Use images.unsplash.com HTTPS image URLs.")).min(1).max(20)
-          .parse(String(form.get("images") ?? "").split("\n").map(v => v.trim()).filter(Boolean));
-        const images = urls.map((url, sortOrder) => ({ url, sortOrder }));
-        if (operation === "create-product") await prisma.product.create({ data: { ...parsed, images: { create: images } } });
-        else await prisma.product.update({ where: { id }, data: { ...parsed, images: { deleteMany: {}, create: images } } });
+          originalPrice: amount,
+          status: z.enum(["LIVE", "DRAFT", "HIDDEN"]),
+          sku: z.string().trim().max(100),
+        }).parse({
+          ...Object.fromEntries(form),
+          status: form.get("status") || "DRAFT",
+          sku: form.get("sku") ?? "",
+        });
+        const discountedPrice = form.get("discountedPrice") === "" || form.get("discountedPrice") === null
+          ? parsed.originalPrice : amount.parse(form.get("discountedPrice"));
+        if (discountedPrice > parsed.originalPrice) return { ok: false, error: "Sale price cannot exceed original price." };
+        const urls = validateImageUrls(String(form.get("images") ?? ""));
+        uploadedUrls = await saveProductUploads(form.getAll("uploads"));
+        if (!urls.length && !uploadedUrls.length) throw new Error("Add at least one image URL or upload.");
+        if (urls.length + uploadedUrls.length > 20) throw new Error("Use no more than 20 images per product.");
+        const images = [...urls, ...uploadedUrls].map((url, sortOrder) => ({ url, sortOrder }));
+        const data = { ...parsed, sku: parsed.sku || null, discountedPrice, featured: form.get("featured") === "on" };
+        if (operation === "create-product") await prisma.product.create({ data: { ...data, images: { create: images } } });
+        else await prisma.product.update({ where: { id }, data: { ...data, images: { deleteMany: {}, create: images } } });
+        uploadsCommitted = true;
       }
     } else if (operation === "delete-order") {
       await prisma.order.delete({ where: { id } });
     } else if (operation === "update-order") {
-      const parsed = z.object({ customerName: text, address: z.string().trim().min(5).max(2000), message: z.string().max(1000), status: z.enum(["PLACED", "CANCELLED"]) }).parse(Object.fromEntries(form));
-      await prisma.order.update({ where: { id }, data: parsed });
+      const parsed = z.object({ customerName: text, address: z.string().trim().min(5).max(2000), message: z.string().max(1000), status: z.enum(ORDER_STATUS_VALUES) }).parse(Object.fromEntries(form));
+      await prisma.$transaction(async tx => {
+        const changed = await tx.order.updateMany({ where: { id, status: { not: parsed.status } }, data: parsed });
+        if (changed.count) await tx.orderStatusEvent.create({ data: { orderId: id, status: parsed.status } });
+        else await tx.order.update({ where: { id }, data: parsed });
+      });
     } else if (operation === "create-order") {
       const userId = text.parse(form.get("userId"));
       const customerName = text.parse(form.get("customerName"));
@@ -89,20 +109,22 @@ export async function adminAction(_: FormResult | null, form: FormData): Promise
         const lines = [];
         for (const [productId, quantity] of quantities) {
           const product = await tx.product.findUniqueOrThrow({ where: { id: productId } });
+          if (product.status !== "LIVE") throw new Error("Insufficient stock or product is not Live: " + product.title);
           const changed = await tx.product.updateMany({ where: { id: productId, stock: { gte: quantity } }, data: { stock: { decrement: quantity } } });
           if (!changed.count) throw new Error("Insufficient stock for " + product.title);
           lines.push({ productId, title: product.title, quantity, unitPrice: sellingPrice(product.originalPrice, product.discountedPrice) });
         }
         const totals = computeCheckoutTotals(lines.reduce((sum, line) => sum + line.quantity * line.unitPrice, 0));
-        await tx.order.create({ data: { userId, customerName, address, message, ...totals, items: { create: lines } } });
+        await tx.order.create({ data: { userId, customerName, address, message, ...totals, statusEvents: { create: { status: "PLACED" } }, items: { create: lines } } });
       });
     } else return { ok: false, error: "Invalid operation." };
   } catch (error) {
     if (error instanceof z.ZodError) return { ok: false, error: error.issues[0].message };
     if (error instanceof SyntaxError) return { ok: false, error: "Order items must be valid JSON." };
-    if (error instanceof Prisma.PrismaClientKnownRequestError) return { ok: false, error: error.code === "P2002" ? "That email or slug already exists." : "Record unavailable or still referenced. Refresh and try again." };
-    return { ok: false, error: error instanceof Error && error.message.startsWith("Insufficient stock") ? error.message : "Could not save. Refresh and try again." };
+    if (error instanceof Prisma.PrismaClientKnownRequestError) return { ok: false, error: error.code === "P2002" ? "That email, slug or SKU already exists." : "Record unavailable or still referenced. Refresh and try again." };
+    return { ok: false, error: error instanceof Error && /^(Insufficient stock|Image URL|Use no more|Add at least|Upload|Each image)/.test(error.message) ? error.message : "Could not save. Refresh and try again." };
   }
+  finally { if (!uploadsCommitted && uploadedUrls.length) await removeProductUploads(uploadedUrls); }
   revalidatePath("/admin", "layout"); revalidatePath("/", "layout");
   return { ok: true };
 }

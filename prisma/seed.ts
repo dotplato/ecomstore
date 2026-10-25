@@ -259,6 +259,8 @@ async function main() {
 
     await prisma.product.create({
       data: {
+        status: "LIVE",
+        featured: true,
         title: p.title,
         slug: p.slug,
         about: p.about,
@@ -271,6 +273,19 @@ async function main() {
         },
       },
     });
+  }
+
+  // Migration creates defaults once. Populate only defaults that still exist;
+  // normal idempotent seed runs return above and never recreate deleted sections.
+  const seedProducts = await prisma.product.findMany({ where: { status: "LIVE" }, orderBy: [{ createdAt: "desc" }, { id: "asc" }] });
+  for (const [id, selected] of [
+    ["default-editors-picks", seedProducts.filter(product => product.featured).slice(0, 8)],
+    ["default-new-arrival", seedProducts.slice(0, 8)],
+    ["default-onsale", seedProducts.filter(product => product.discountedPrice.lessThan(product.originalPrice)).slice(0, 8)],
+  ] as const) {
+    if (await prisma.storefrontSection.findUnique({ where: { id } })) {
+      await prisma.storefrontSection.update({ where: { id }, data: { products: { deleteMany: {}, create: selected.map((product, sortOrder) => ({ productId: product.id, sortOrder })) } } });
+    }
   }
 
   console.log(`Seeded ${categories.length} categories, ${products.length} products`);
