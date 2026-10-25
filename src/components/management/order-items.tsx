@@ -1,0 +1,7 @@
+"use client";
+import { useState } from "react";
+import { Button } from "@/components/ui/button";
+export function OrderItems({ products }: { products: { id: string; title: string }[] }) {
+  const [items, setItems] = useState([{ productId: products[0]?.id ?? "", quantity: 1 }]);
+  return <div className="space-y-3"><input type="hidden" name="items" value={JSON.stringify(items)} /><p className="text-sm font-medium">Products</p>{items.map((item, index) => <div key={index} className="flex gap-2"><select aria-label={`Product ${index + 1}`} required value={item.productId} onChange={e => setItems(items.map((row, i) => i === index ? { ...row, productId: e.target.value } : row))} className="min-w-0 flex-1 rounded-xl border border-border p-2">{products.map(p => <option key={p.id} value={p.id}>{p.title}</option>)}</select><input aria-label={`Quantity ${index + 1}`} required type="number" min="1" max="99" value={item.quantity} onChange={e => setItems(items.map((row, i) => i === index ? { ...row, quantity: Number(e.target.value) } : row))} className="w-20 rounded-xl border border-border p-2" /><Button type="button" variant="ghost" size="sm" disabled={items.length === 1} onClick={() => setItems(items.filter((_, i) => i !== index))}>Remove</Button></div>)}<Button type="button" size="sm" variant="secondary" onClick={() => setItems([...items, { productId: products[0]?.id ?? "", quantity: 1 }])}>Add product</Button></div>;
+}

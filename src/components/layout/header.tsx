@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Heart, ShoppingCart, User } from "lucide-react";
 import { Suspense } from "react";
 import { auth } from "@/lib/auth";
+import { currentUser } from "@/lib/access";
 import { getCartWithItems } from "@/lib/cart";
 import { prisma } from "@/lib/prisma";
 import { logoutAction } from "@/actions/auth";
@@ -13,10 +14,12 @@ const nav = [
   { href: "/", label: "Home" },
   { href: "/shop", label: "Shop" },
   { href: "/categories", label: "Categories" },
+  { href: "/support", label: "Support" },
 ];
 
 export async function Header() {
   const session = await auth();
+  const user = await currentUser();
   let cartCount = 0;
   let wishCount = 0;
 
@@ -53,6 +56,7 @@ export async function Header() {
         </div>
 
         <div className="ml-auto flex items-center gap-1 sm:gap-2">
+          {user && user.role !== "CUSTOMER" && <Link href="/admin" className="px-2 text-sm font-medium text-primary">Admin</Link>}
           <Link
             href="/wishlist"
             className="relative rounded-full p-2 text-foreground/80 transition hover:bg-muted hover:text-foreground"

@@ -251,7 +251,6 @@ Seed is for **development only**. Production uses migrations without demo passwo
 ## 11. What We Explicitly Do Not Build (v1)
 
 - Payment gateways (Stripe, etc.)
-- Admin CMS / merchant dashboard
 - Email notifications
 - Inventory reservations beyond simple stock decrement on order
 - Multi-currency
@@ -300,3 +299,13 @@ docker compose up --build
 | 2026-10-25 | Implemented v1 storefront; Prisma pinned to v6; seed is idempotent unless `FORCE_SEED=1` |
 
 When you change a locked decision, append a row here and update the relevant section above.
+
+## 15. Administration and customer support
+
+Roles: CUSTOMER (signup default), ADMIN, SUPER_ADMIN. Authorization always reads the current user from PostgreSQL at each protected page and mutation; JWT claims are not a role authority. Admins manage customer records, inventory, orders, and support conversations. Only super admins create records and manage admin roles; promotion accepts an existing account email. Staff cannot modify or delete other staff through customer management, and super admins cannot delete/demote themselves. Bootstrap the first super admin through `npm run admin:bootstrap -- email@example.com` after that account signs up; no default privileged credentials.
+
+Customer support uses private threads with messages and OPEN/CLOSED state. Customers can create, view and reply to their own threads. Staff can read/reply, edit/delete messages, and close/reopen/delete threads. Every mutation checks ownership or staff authorization. Routes: `/support`, `/support/[id]`, `/admin`, `/admin/users`, `/admin/products`, `/admin/orders`, `/admin/support`, `/admin/admins`. Form validation uses Zod; errors are displayed inline. User deletion removes their dependent data, including orders, after explicit confirmation. Product deletion preserves order line snapshots. Admin order creation computes totals on the server; order status changes do not adjust stock (stock updates happen on order creation only).
+
+### CSS compilation and local port
+
+Tailwind v4 runs through `@tailwindcss/postcss` in `postcss.config.mjs`, shared by Turbopack and webpack. Do not use a bundler-specific CSS loader. The development script explicitly uses port 3000; stop an existing instance before starting another.

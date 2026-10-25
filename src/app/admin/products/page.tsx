@@ -1,0 +1,13 @@
+import { prisma } from "@/lib/prisma";
+import { requireStaff } from "@/lib/access";
+import { adminAction } from "@/actions/admin";
+import { ActionForm, Field } from "@/components/management/action-form";
+import { Card, Hidden, Area } from "@/components/management/common";
+export default async function ProductsPage() {
+  const actor = await requireStaff();
+  const [products, categories] = await Promise.all([prisma.product.findMany({ include: { images: { orderBy: { sortOrder: "asc" } } }, orderBy: { title: "asc" } }), prisma.category.findMany({ orderBy: { name: "asc" } })]);
+  function fields(product?: typeof products[number]) {
+    return <><Field name="title" label="Title" value={product?.title} /><Field name="slug" label="URL slug" value={product?.slug} /><Area name="about" label="About" value={product?.about} required /><label className="block text-sm font-medium">Category<select name="categoryId" defaultValue={product?.categoryId} required className="mt-1 block w-full rounded-xl border border-border p-2">{categories.map(cat => <option key={cat.id} value={cat.id}>{cat.name}</option>)}</select></label><div className="grid grid-cols-2 gap-3"><Field name="originalPrice" label="Original price" type="number" value={product?.originalPrice.toString()} /><Field name="discountedPrice" label="Selling price" type="number" value={product?.discountedPrice.toString()} /></div><Field name="stock" label="Stock quantity" type="number" value={product?.stock ?? 0} /><Area name="images" label="Image URLs (images.unsplash.com, one per line)" value={product?.images.map(image => image.url).join("\n")} required /></>;
+  }
+  return <><h1 className="mb-6 text-3xl font-bold">Product inventory</h1><div className="space-y-4">{actor.role === "SUPER_ADMIN" && <Card title="Add product"><ActionForm action={adminAction} label="Create product"><Hidden name="operation" value="create-product" />{fields()}</ActionForm></Card>}{products.map(product => <details key={product.id} className="rounded-2xl border border-border bg-white p-5"><summary className="cursor-pointer font-medium">{product.title} <span className="text-sm text-muted-foreground">· {product.stock} in stock</span></summary><div className="mt-5"><ActionForm action={adminAction}><Hidden name="id" value={product.id} /><Hidden name="operation" value="update-product" />{fields(product)}</ActionForm><div className="mt-4"><ActionForm action={adminAction} label="Delete product" confirm="Permanently delete this product? Existing order snapshots will be preserved."><Hidden name="id" value={product.id} /><Hidden name="operation" value="delete-product" /></ActionForm></div></div></details>)}</div></>;
+}
